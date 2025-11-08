@@ -2,9 +2,9 @@ name: Deploy UserAPI to AWS Lambda
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, Master]
   pull_request:
-    branches: [main, master]
+    branches: [main, Master]
 
 env:
   AWS_REGION: us-east-1
