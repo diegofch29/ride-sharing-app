@@ -121,10 +121,25 @@ jobs:
           API_ID=${{ steps.set-api-id.outputs.api_id }}
 
           # Check if $default stage exists
-          STAGE_EXISTS=$(aws apigatewayv2 get-stages --api-id $API_ID --region ${{ vars.AWS_REGION }} --query "Items[?StageName=='$default'].StageName" --output text)
+          STAGE_EXISTS=$(aws apigatewayv2 get-stages --api-id $API_ID --region ${{ vars.AWS_REGION }} --query "Items[?StageName=='\$default'].StageName" --output text 2>/dev/null || echo "")
 
-          if [ -z "$STAGE_EXISTS" ]; then
+          if [ -z "$STAGE_EXISTS" ] || [ "$STAGE_EXISTS" == "None" ]; then
+            echo "Creating new stage..."
             aws apigatewayv2 create-stage \
+              --api-id $API_ID \
+              --stage-name '$default' \
+              --auto-deploy \
+              --region ${{ vars.AWS_REGION }} 2>/dev/null || {
+                echo "Stage already exists, updating instead..."
+                aws apigatewayv2 update-stage \
+                  --api-id $API_ID \
+                  --stage-name '$default' \
+                  --auto-deploy \
+                  --region ${{ vars.AWS_REGION }}
+              }
+          else
+            echo "Updating existing stage..."
+            aws apigatewayv2 update-stage \
               --api-id $API_ID \
               --stage-name '$default' \
               --auto-deploy \
