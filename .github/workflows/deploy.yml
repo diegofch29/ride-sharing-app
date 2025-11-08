@@ -108,7 +108,7 @@ jobs:
         id: check-function
         continue-on-error: true
         run: |
-          if aws lambda get-function --function-name ${{ vars.LAMBDA_FUNCTION_NAME }} --region ${{ vars.AWS_REGION }}; then
+          if aws lambda get-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --region ${{ vars.AWS_REGION }}; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -122,7 +122,7 @@ jobs:
           MONGODB_CONN: ${{ secrets.MONGODB_CONNECTION_STRING }}
         run: |
           aws lambda create-function \
-            --function-name ${{ vars.LAMBDA_FUNCTION_NAME }} \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --package-type Image \
             --code ImageUri=$IMAGE_URI \
             --role arn:aws:iam::377808026388:role/lambda-execution-role \
@@ -139,7 +139,7 @@ jobs:
           IMAGE_URI: ${{ steps.build-image.outputs.image }}
         run: |
           aws lambda update-function-code \
-            --function-name ${{ vars.LAMBDA_FUNCTION_NAME }} \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --image-uri $IMAGE_URI
           echo "updated=true" >> $GITHUB_OUTPUT
 
