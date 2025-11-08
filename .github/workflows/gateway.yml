@@ -1,0 +1,151 @@
+name: Deploy API Gateway
+
+on:
+  push:
+    branches: [main, Master]
+  pull_request:
+    branches: [main, Master]
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  API_GATEWAY_NAME: ridesharingapp-api
+  LAMBDA_FUNCTION_NAME: userapi-function
+
+jobs:
+  deploy-api-gateway:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Get Lambda function ARN
+        id: get-lambda
+        run: |
+          LAMBDA_ARN=$(aws lambda get-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --region ${{ vars.AWS_REGION }} --query 'Configuration.FunctionArn' --output text)
+          echo "lambda_arn=$LAMBDA_ARN" >> $GITHUB_OUTPUT
+
+      - name: Check if API Gateway exists
+        id: check-api
+        continue-on-error: true
+        run: |
+          API_ID=$(aws apigatewayv2 get-apis --region ${{ vars.AWS_REGION }} --query "Items[?Name=='${{ env.API_GATEWAY_NAME }}'].ApiId" --output text)
+          if [ -z "$API_ID" ]; then
+            echo "exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "api_id=$API_ID" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create API Gateway
+        id: create-api
+        if: steps.check-api.outputs.exists == 'false'
+        run: |
+          API_ID=$(aws apigatewayv2 create-api \
+            --name ${{ env.API_GATEWAY_NAME }} \
+            --protocol-type HTTP \
+            --target ${{ steps.get-lambda.outputs.lambda_arn }} \
+            --region ${{ vars.AWS_REGION }} \
+            --query 'ApiId' --output text)
+          echo "api_id=$API_ID" >> $GITHUB_OUTPUT
+
+      - name: Set API ID
+        id: set-api-id
+        run: |
+          if [ "${{ steps.check-api.outputs.exists }}" == "true" ]; then
+            echo "api_id=${{ steps.check-api.outputs.api_id }}" >> $GITHUB_OUTPUT
+          else
+            echo "api_id=${{ steps.create-api.outputs.api_id }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create or update integration
+        run: |
+          # Check if integration exists
+          INTEGRATION_ID=$(aws apigatewayv2 get-integrations \
+            --api-id ${{ steps.set-api-id.outputs.api_id }} \
+            --region ${{ vars.AWS_REGION }} \
+            --query "Items[?IntegrationUri=='${{ steps.get-lambda.outputs.lambda_arn }}'].IntegrationId" --output text)
+
+          if [ -z "$INTEGRATION_ID" ]; then
+            # Create integration
+            INTEGRATION_ID=$(aws apigatewayv2 create-integration \
+              --api-id ${{ steps.set-api-id.outputs.api_id }} \
+              --integration-type AWS_PROXY \
+              --integration-uri ${{ steps.get-lambda.outputs.lambda_arn }} \
+              --payload-format-version 2.0 \
+              --region ${{ vars.AWS_REGION }} \
+              --query 'IntegrationId' --output text)
+          fi
+          echo "INTEGRATION_ID=$INTEGRATION_ID" >> $GITHUB_ENV
+
+      - name: Create or update routes
+        run: |
+          API_ID=${{ steps.set-api-id.outputs.api_id }}
+
+          # Create default route
+          DEFAULT_ROUTE=$(aws apigatewayv2 get-routes --api-id $API_ID --region ${{ vars.AWS_REGION }} --query "Items[?RouteKey=='$default'].RouteId" --output text)
+          if [ -z "$DEFAULT_ROUTE" ]; then
+            aws apigatewayv2 create-route \
+              --api-id $API_ID \
+              --route-key '$default' \
+              --target integrations/$INTEGRATION_ID \
+              --region ${{ vars.AWS_REGION }}
+          else
+            aws apigatewayv2 update-route \
+              --api-id $API_ID \
+              --route-id $DEFAULT_ROUTE \
+              --target integrations/$INTEGRATION_ID \
+              --region ${{ vars.AWS_REGION }}
+          fi
+
+      - name: Create or update stage
+        run: |
+          API_ID=${{ steps.set-api-id.outputs.api_id }}
+
+          # Check if $default stage exists
+          STAGE_EXISTS=$(aws apigatewayv2 get-stages --api-id $API_ID --region ${{ vars.AWS_REGION }} --query "Items[?StageName=='$default'].StageName" --output text)
+
+          if [ -z "$STAGE_EXISTS" ]; then
+            aws apigatewayv2 create-stage \
+              --api-id $API_ID \
+              --stage-name '$default' \
+              --auto-deploy \
+              --region ${{ vars.AWS_REGION }}
+          fi
+
+      - name: Grant API Gateway permission to invoke Lambda
+        continue-on-error: true
+        run: |
+          API_ID=${{ steps.set-api-id.outputs.api_id }}
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+          aws lambda add-permission \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --statement-id apigateway-invoke-$API_ID \
+            --action lambda:InvokeFunction \
+            --principal apigateway.amazonaws.com \
+            --source-arn "arn:aws:execute-api:${{ vars.AWS_REGION }}:$ACCOUNT_ID:$API_ID/*/*" \
+            --region ${{ vars.AWS_REGION }} || echo "Permission already exists"
+
+      - name: Get API Gateway endpoint
+        run: |
+          API_ID=${{ steps.set-api-id.outputs.api_id }}
+          API_ENDPOINT="https://$API_ID.execute-api.${{ vars.AWS_REGION }}.amazonaws.com"
+          echo "::notice::API Gateway endpoint: $API_ENDPOINT"
+          echo "API_ENDPOINT=$API_ENDPOINT" >> $GITHUB_ENV
+
+      - name: Output deployment info
+        run: |
+          echo "✅ API Gateway deployed successfully!"
+          echo "📍 API ID: ${{ steps.set-api-id.outputs.api_id }}"
+          echo "🔗 Endpoint: $API_ENDPOINT"
+          echo ""
+          echo "Test the API with:"
+          echo "curl $API_ENDPOINT/api/users"
