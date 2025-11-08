@@ -104,7 +104,38 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
+      - name: Check if Lambda function exists
+        id: check-function
+        continue-on-error: true
+        run: |
+          if aws lambda get-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --region ${{ env.AWS_REGION }}; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Lambda function if it doesn't exist
+        if: steps.check-function.outputs.exists == 'false'
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image }}
+        run: |
+          aws lambda create-function \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --package-type Image \
+            --code ImageUri=${{ env.IMAGE_URI }} \
+            --role arn:aws:iam::377808026388:role/lambda-execution-role \
+            --region ${{ env.AWS_REGION }} \
+            --timeout 30 \
+            --memory-size 512 \
+            --environment Variables='{
+              "ASPNETCORE_ENVIRONMENT":"Production",
+              "MongoDbSettings__ConnectionString":"${{ secrets.MONGODB_CONNECTION_STRING }}",
+              "MongoDbSettings__DatabaseName":"UserServiceDB",
+              "MongoDbSettings__UsersCollectionName":"Users"
+            }'
+
       - name: Update Lambda function
+        if: steps.check-function.outputs.exists == 'true'
         env:
           IMAGE_URI: ${{ steps.build-image.outputs.image }}
         run: |
@@ -113,11 +144,13 @@ jobs:
             --image-uri ${{ env.IMAGE_URI }}
 
       - name: Wait for Lambda function update
+        if: steps.check-function.outputs.exists == 'true'
         run: |
           aws lambda wait function-updated \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
 
       - name: Update Lambda function configuration (if needed)
+        if: steps.check-function.outputs.exists == 'true'
         run: |
           aws lambda update-function-configuration \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
