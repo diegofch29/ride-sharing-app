@@ -89,15 +89,26 @@ jobs:
         run: |
           API_ID=${{ steps.set-api-id.outputs.api_id }}
 
-          # Create default route
-          DEFAULT_ROUTE=$(aws apigatewayv2 get-routes --api-id $API_ID --region ${{ vars.AWS_REGION }} --query "Items[?RouteKey=='$default'].RouteId" --output text)
-          if [ -z "$DEFAULT_ROUTE" ]; then
+          # Get existing default route
+          DEFAULT_ROUTE=$(aws apigatewayv2 get-routes --api-id $API_ID --region ${{ vars.AWS_REGION }} --query "Items[?RouteKey=='\$default'].RouteId" --output text 2>/dev/null || echo "")
+
+          if [ -z "$DEFAULT_ROUTE" ] || [ "$DEFAULT_ROUTE" == "None" ]; then
+            echo "Creating new default route..."
             aws apigatewayv2 create-route \
               --api-id $API_ID \
               --route-key '$default' \
               --target integrations/$INTEGRATION_ID \
-              --region ${{ vars.AWS_REGION }}
+              --region ${{ vars.AWS_REGION }} 2>/dev/null || {
+                echo "Route already exists, updating instead..."
+                DEFAULT_ROUTE=$(aws apigatewayv2 get-routes --api-id $API_ID --region ${{ vars.AWS_REGION }} --query "Items[?RouteKey=='\$default'].RouteId" --output text)
+                aws apigatewayv2 update-route \
+                  --api-id $API_ID \
+                  --route-id $DEFAULT_ROUTE \
+                  --target integrations/$INTEGRATION_ID \
+                  --region ${{ vars.AWS_REGION }}
+              }
           else
+            echo "Updating existing default route..."
             aws apigatewayv2 update-route \
               --api-id $API_ID \
               --route-id $DEFAULT_ROUTE \
