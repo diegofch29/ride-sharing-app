@@ -8,7 +8,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: userapi
+  ECR_REPOSITORY: ridesharingapp
   LAMBDA_FUNCTION_NAME: userapi-function
 
 jobs:
@@ -88,8 +88,8 @@ jobs:
       - name: Create ECR repository if it doesn't exist
         continue-on-error: true
         run: |
-          aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }} || \
-          aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }}
+          aws ecr describe-repositories --repository-names ${{ vars.ECR_REPOSITORY }} --region ${{ vars.AWS_REGION }} || \
+          aws ecr create-repository --repository-name ${{ vars.ECR_REPOSITORY }} --region ${{ vars.AWS_REGION }}
 
       - name: Build, tag, and push image to Amazon ECR
         id: build-image
@@ -108,40 +108,40 @@ jobs:
         id: check-function
         continue-on-error: true
         run: |
-          if aws lambda get-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} --region ${{ env.AWS_REGION }}; then
+          if aws lambda get-function --function-name ${{ vars.LAMBDA_FUNCTION_NAME_USER_API }} --region ${{ vars.AWS_REGION }}; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Lambda function if it doesn't exist
+        id: create-function
         if: steps.check-function.outputs.exists == 'false'
         env:
           IMAGE_URI: ${{ steps.build-image.outputs.image }}
+          MONGODB_CONN: ${{ secrets.MONGODB_CONNECTION_STRING }}
         run: |
-          aws lambda create-function \
-            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+          RESPONSE=$(aws lambda create-function \
+            --function-name ${{ vars.LAMBDA_FUNCTION_NAME }} \
             --package-type Image \
-            --code ImageUri=${{ env.IMAGE_URI }} \
+            --code ImageUri=$IMAGE_URI \
             --role arn:aws:iam::377808026388:role/lambda-execution-role \
-            --region ${{ env.AWS_REGION }} \
+            --region ${{ vars.AWS_REGION }} \
             --timeout 30 \
             --memory-size 512 \
-            --environment Variables='{
-              "ASPNETCORE_ENVIRONMENT":"Production",
-              "MongoDbSettings__ConnectionString":"${{ secrets.MONGODB_CONNECTION_STRING }}",
-              "MongoDbSettings__DatabaseName":"UserServiceDB",
-              "MongoDbSettings__UsersCollectionName":"Users"
-            }'
+            --environment "Variables={ASPNETCORE_ENVIRONMENT=Production,MongoDbSettings__ConnectionString=$MONGODB_CONN,MongoDbSettings__DatabaseName=UserServiceDB,MongoDbSettings__UsersCollectionName=Users}")
+          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
 
       - name: Update Lambda function
+        id: update-function
         if: steps.check-function.outputs.exists == 'true'
         env:
           IMAGE_URI: ${{ steps.build-image.outputs.image }}
         run: |
-          aws lambda update-function-code \
-            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-            --image-uri ${{ env.IMAGE_URI }}
+          RESPONSE=$(aws lambda update-function-code \
+            --function-name ${{ vars.LAMBDA_FUNCTION_NAME }} \
+            --image-uri $IMAGE_URI)
+          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
 
       - name: Wait for Lambda function update
         if: steps.check-function.outputs.exists == 'true'
@@ -151,12 +151,9 @@ jobs:
 
       - name: Update Lambda function configuration (if needed)
         if: steps.check-function.outputs.exists == 'true'
+        env:
+          MONGODB_CONN: ${{ secrets.MONGODB_CONNECTION_STRING }}
         run: |
           aws lambda update-function-configuration \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
-            --environment Variables='{
-              "ASPNETCORE_ENVIRONMENT":"Production",
-              "MongoDbSettings__ConnectionString":"${{ secrets.MONGODB_CONNECTION_STRING }}",
-              "MongoDbSettings__DatabaseName":"UserServiceDB",
-              "MongoDbSettings__UsersCollectionName":"Users"
-            }'
+            --environment "Variables={ASPNETCORE_ENVIRONMENT=Production,MongoDbSettings__ConnectionString=$MONGODB_CONN,MongoDbSettings__DatabaseName=UserServiceDB,MongoDbSettings__UsersCollectionName=Users}"
