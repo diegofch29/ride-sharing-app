@@ -7,7 +7,7 @@ on:
     branches: [main, Master]
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: ${{ vars.AWS_REGION }}
   ECR_REPOSITORY: ridesharingapp
   LAMBDA_FUNCTION_NAME: userapi-function
 
