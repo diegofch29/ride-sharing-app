@@ -22,7 +22,7 @@ jobs:
       - name: Create appsettings files from environment variables
         run: |
           # Create appsettings.json
-          cat > /UserService/UserAPI/appsettings.json << EOF
+          cat > UserService/UserAPI/appsettings.json << EOF
           {
             "Logging": {
               "LogLevel": {
@@ -40,7 +40,7 @@ jobs:
           EOF
 
           # Create appsettings.Development.json
-          cat > /UserService/UserAPI/appsettings.Development.json << EOF
+          cat > UserService/UserAPI/appsettings.Development.json << EOF
           {
             "Logging": {
               "LogLevel": {
@@ -57,7 +57,7 @@ jobs:
           EOF
 
           # Create appsettings.Production.json
-          cat > /UserService/UserAPI/appsettings.Production.json << EOF
+          cat > UserService/UserAPI/appsettings.Production.json << EOF
           {
             "Logging": {
               "LogLevel": {
