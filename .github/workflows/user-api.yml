@@ -119,7 +119,7 @@ jobs:
         if: steps.check-function.outputs.exists == 'false'
         env:
           IMAGE_URI: ${{ steps.build-image.outputs.image }}
-          MONGODB_CONN: ${{ secrets.MONGODB_CONNECTION_STRING }}
+          MONGODB_CONN: ${{ vars.MONGODB_CONNECTION_STRING }}
         run: |
           aws lambda create-function \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
@@ -152,7 +152,7 @@ jobs:
       - name: Update Lambda function configuration (if needed)
         if: steps.check-function.outputs.exists == 'true'
         env:
-          MONGODB_CONN: ${{ secrets.MONGODB_CONNECTION_STRING }}
+          MONGODB_CONN: ${{ vars.MONGODB_CONNECTION_STRING }}
         run: |
           aws lambda update-function-configuration \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
