@@ -1,5 +1,5 @@
 # Multi-stage build for AWS Lambda
-FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
 # Copy csproj and restore dependencies
@@ -11,7 +11,7 @@ COPY . ./
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime image for AWS Lambda
-FROM public.ecr.aws/lambda/dotnet:10
+FROM public.ecr.aws/lambda/dotnet:8
 WORKDIR ${LAMBDA_TASK_ROOT}
 
 # Copy the published application
