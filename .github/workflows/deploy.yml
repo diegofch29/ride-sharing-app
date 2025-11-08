@@ -22,7 +22,7 @@ jobs:
       - name: Create appsettings files from environment variables
         run: |
           # Create appsettings.json
-          cat > appsettings.json << EOF
+          cat > /UserService/UserAPI/appsettings.json << EOF
           {
             "Logging": {
               "LogLevel": {
@@ -40,7 +40,7 @@ jobs:
           EOF
 
           # Create appsettings.Development.json
-          cat > appsettings.Development.json << EOF
+          cat > /UserService/UserAPI/appsettings.Development.json << EOF
           {
             "Logging": {
               "LogLevel": {
@@ -57,7 +57,7 @@ jobs:
           EOF
 
           # Create appsettings.Production.json
-          cat > appsettings.Production.json << EOF
+          cat > /UserService/UserAPI/appsettings.Production.json << EOF
           {
             "Logging": {
               "LogLevel": {
@@ -92,6 +92,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           # Build a docker container and push it to ECR 
+          cd UserService/UserAPI
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
