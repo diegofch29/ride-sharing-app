@@ -1,0 +1,58 @@
+@UserAPI_HostAddress = https://localhost:7097
+
+### Get all users
+GET {{UserAPI_HostAddress}}/api/user
+Accept: application/json
+
+###
+
+### Get user by ID (replace with actual ID after creating a user)
+GET {{UserAPI_HostAddress}}/api/user/67390a2b8f1e2a4567890123
+Accept: application/json
+
+###
+
+### Create a new user
+POST {{UserAPI_HostAddress}}/api/user
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john.doe@example.com",
+  "password": "securepassword123"
+}
+
+###
+
+### Create another user
+POST {{UserAPI_HostAddress}}/api/user
+Content-Type: application/json
+
+{
+  "name": "Jane Smith",
+  "email": "jane.smith@example.com",
+  "password": "anotherpassword456"
+}
+
+###
+
+### Update user (replace with actual ID)
+PUT {{UserAPI_HostAddress}}/api/user/67390a2b8f1e2a4567890123
+Content-Type: application/json
+
+{
+  "name": "John Doe Updated",
+  "email": "john.doe.updated@example.com"
+}
+
+###
+
+### Check if user exists (replace with actual ID)
+HEAD {{UserAPI_HostAddress}}/api/user/67390a2b8f1e2a4567890123
+
+###
+
+### Delete user (replace with actual ID)
+DELETE {{UserAPI_HostAddress}}/api/user/67390a2b8f1e2a4567890123
+
+###

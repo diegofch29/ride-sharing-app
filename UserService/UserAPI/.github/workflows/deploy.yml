@@ -1,0 +1,121 @@
+name: Deploy UserAPI to AWS Lambda
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: userapi
+  LAMBDA_FUNCTION_NAME: userapi-function
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create appsettings files from environment variables
+        run: |
+          # Create appsettings.json
+          cat > appsettings.json << EOF
+          {
+            "Logging": {
+              "LogLevel": {
+                "Default": "Information",
+                "Microsoft.AspNetCore": "Warning"
+              }
+            },
+            "AllowedHosts": "*",
+            "MongoDbSettings": {
+              "ConnectionString": "${{ vars.MONGODB_CONNECTION_STRING }}",
+              "DatabaseName": "${{ vars.MONGODB_DATABASE_NAME }}",
+              "UsersCollectionName": "${{ vars.MONGODB_COLLECTION_NAME }}"
+            }
+          }
+          EOF
+
+          # Create appsettings.Development.json
+          cat > appsettings.Development.json << EOF
+          {
+            "Logging": {
+              "LogLevel": {
+                "Default": "Information",
+                "Microsoft.AspNetCore": "Warning"
+              }
+            },
+            "MongoDbSettings": {
+              "ConnectionString": "${{ vars.MONGODB_CONNECTION_STRING }}",
+              "DatabaseName": "${{ vars.MONGODB_DATABASE_NAME }}",
+              "UsersCollectionName": "${{ vars.MONGODB_COLLECTION_NAME }}"
+            }
+          }
+          EOF
+
+          # Create appsettings.Production.json
+          cat > appsettings.Production.json << EOF
+          {
+            "Logging": {
+              "LogLevel": {
+                "Default": "Information",
+                "Microsoft.AspNetCore": "Warning",
+                "Microsoft.Hosting.Lifetime": "Information"
+              }
+            },
+            "MongoDbSettings": {
+              "ConnectionString": "${{ vars.MONGODB_CONNECTION_STRING }}",
+              "DatabaseName": "${{ vars.MONGODB_DATABASE_NAME }}",
+              "UsersCollectionName": "${{ vars.MONGODB_COLLECTION_NAME }}"
+            }
+          }
+          EOF
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build a docker container and push it to ECR 
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Update Lambda function
+        env:
+          IMAGE_URI: ${{ steps.build-image.outputs.image }}
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --image-uri ${{ env.IMAGE_URI }}
+
+      - name: Wait for Lambda function update
+        run: |
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
+
+      - name: Update Lambda function configuration (if needed)
+        run: |
+          aws lambda update-function-configuration \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --environment Variables='{
+              "ASPNETCORE_ENVIRONMENT":"Production",
+              "MongoDbSettings__ConnectionString":"${{ secrets.MONGODB_CONNECTION_STRING }}",
+              "MongoDbSettings__DatabaseName":"UserServiceDB",
+              "MongoDbSettings__UsersCollectionName":"Users"
+            }'
