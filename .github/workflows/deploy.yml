@@ -121,7 +121,7 @@ jobs:
           IMAGE_URI: ${{ steps.build-image.outputs.image }}
           MONGODB_CONN: ${{ secrets.MONGODB_CONNECTION_STRING }}
         run: |
-          RESPONSE=$(aws lambda create-function \
+          aws lambda create-function \
             --function-name ${{ vars.LAMBDA_FUNCTION_NAME_USER_API }} \
             --package-type Image \
             --code ImageUri=$IMAGE_URI \
@@ -129,8 +129,8 @@ jobs:
             --region ${{ vars.AWS_REGION }} \
             --timeout 30 \
             --memory-size 512 \
-            --environment "Variables={ASPNETCORE_ENVIRONMENT=Production,MongoDbSettings__ConnectionString=$MONGODB_CONN,MongoDbSettings__DatabaseName=UserServiceDB,MongoDbSettings__UsersCollectionName=Users}")
-          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+            --environment "Variables={ASPNETCORE_ENVIRONMENT=Production,MongoDbSettings__ConnectionString=$MONGODB_CONN,MongoDbSettings__DatabaseName=UserServiceDB,MongoDbSettings__UsersCollectionName=Users}"
+          echo "created=true" >> $GITHUB_OUTPUT
 
       - name: Update Lambda function
         id: update-function
@@ -138,10 +138,10 @@ jobs:
         env:
           IMAGE_URI: ${{ steps.build-image.outputs.image }}
         run: |
-          RESPONSE=$(aws lambda update-function-code \
+          aws lambda update-function-code \
             --function-name ${{ vars.LAMBDA_FUNCTION_NAME_USER_API }} \
-            --image-uri $IMAGE_URI)
-          echo "response=$RESPONSE" >> $GITHUB_OUTPUT
+            --image-uri $IMAGE_URI
+          echo "updated=true" >> $GITHUB_OUTPUT
 
       - name: Wait for Lambda function update
         if: steps.check-function.outputs.exists == 'true'
